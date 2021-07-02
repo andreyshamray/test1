@@ -1,3 +1,8 @@
+# First configure you aws cli
+```
+aws configure
+```
+
 # To Deploy test env pls exec py script
 ```
 python3 ./deploy.py --EnvironmentName test1 --DeployELB true
@@ -11,3 +16,6 @@ python3 ./destroy.py --EnvironmentName test1
 ```
 
 # List AWS services being used region wise
+```
+python3 ./list-resources.py
+```

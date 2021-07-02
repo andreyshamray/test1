@@ -6,7 +6,6 @@ import boto3
 import botocore
 
 
-
 def main():
     for regionname in ["eu-central-1"]:
 ###For All regions!!!###
@@ -20,42 +19,40 @@ def main():
             for instance in reservation["Instances"]:
                 print(instance["InstanceId"])
 
-        ec2_client = boto3.client('ec2')
+        client_vpc = boto3.client('ec2')
         print('VPC:')
         print('-------')
-        vpc_all = ec2_client.describe_vpcs()
+        vpc_all = client_vpc.describe_vpcs()
         for vpc in vpc_all['Vpcs'] :
             print(vpc['VpcId'])
 
-        ec2_client = boto3.client('ec2')
+        client_sb = boto3.client('ec2')
         print('Subnets:')
         print('-------')
-        sn_all = ec2_client.describe_subnets()
+        sn_all = client_sb.describe_subnets()
         for sn in sn_all['Subnets'] :
             print(sn['SubnetId'])
         
-        client = boto3.client('elbv2')
+        client_elb = boto3.client('elbv2')
         print('ELBv2:')
         print('-------')
-        elb_all = client.describe_load_balancers()
+        elb_all = client_elb.describe_load_balancers()
         for elb in elb_all['LoadBalancers'] :
             print(elb['DNSName'])
 
-#        client = boto3.client('route53')
-#        paginator = client.get_paginator('list_resource_record_sets')
-#        try:
-#            source_zone_records = paginator.paginate(HostedZoneId='HostedZoneId')
-#            for record_set in source_zone_records:
-#                for record in record_set['ResourceRecordSets']:
-#                    if record['Type'] == 'CNAME':
-#                        print(record['Name'])
-#        
-#        except Exception as error:
-#            print('An error occurred getting source zone records:')
-#            print(str(error))
-#            raise
-
-
+        client_r53 = boto3.client('route53')
+        zones = client_r53.list_hosted_zones_by_name()
+        if not zones or len(zones['HostedZones']) == 0:
+            raise Exception("Could not find DNS zone to update")
+        else:
+            zone_id = zones['HostedZones'][0]['Id']
+            print(zone_id)
+        print('Route53 records:')
+        print('-------')
+        route53_all = client_r53.list_resource_record_sets(HostedZoneId=zone_id)
+        for route53 in route53_all['ResourceRecordSets'] :
+            print(route53['Name'])
+            print(route53['Type'])
 
 if __name__ == "__main__":
     main()
