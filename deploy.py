@@ -8,7 +8,7 @@ import botocore
 cf = boto3.client('cloudformation')
 
 def main(args):
-    stack_name = 'test1-{}'.format(args.MoleculeClusterName)
+    stack_name = 'test1-{}'.format(args.EnvironmentName)
     'Update or create stack'
     template = 'vpc-elb.template'
 
@@ -20,52 +20,8 @@ def main(args):
         'Capabilities': ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
         'Parameters': [
             {
-                'ParameterKey': 'MoleculeClusterName',
-                'ParameterValue': args.MoleculeClusterName
-            },
-            {
-                'ParameterKey': 'NodeInstanceType',
-                'ParameterValue': args.NodeInstanceType
-            },
-            {
-                'ParameterKey': 'BoomiUsername',
-                'ParameterValue': args.BoomiUsername
-            },
-            {
-                'ParameterKey': 'BoomiPassword',
-                'ParameterValue': args.BoomiPassword
-            },
-            {
-                'ParameterKey': 'Environment',
-                'ParameterValue': args.Environment
-            },
-            {
-                'ParameterKey': 'BoomiCloudID',
-                'ParameterValue': args.BoomiCloudID
-            },
-            {
-                'ParameterKey': 'DesireAmountOfInstance',
-                'ParameterValue': args.DesireAmountOfInstance
-            },
-            {
-                'ParameterKey': 'BoomiAccountID',
-                'ParameterValue': args.BoomiAccountID
-            },
-            {
-                'ParameterKey': 'BoomiCloudName',
-                'ParameterValue': args.BoomiCloudName
-            },
-            {
-                'ParameterKey': 'VaultPem',
-                'ParameterValue': args.VaultPem
-            },
-            {
-                'ParameterKey': 'NodeExporterVersion',
-                'ParameterValue': args.NodeExporterVersion
-            },
-            {
-                'ParameterKey': 'FilebeatVersion',
-                'ParameterValue': args.FilebeatVersion
+                'ParameterKey': 'EnvironmentName',
+                'ParameterValue': args.EnvironmentName
             },
             {
                 'ParameterKey': 'DeployELB',
@@ -75,19 +31,15 @@ def main(args):
         'Tags': [
             {
                 'Key': 'Product',
-                'Value': 'Boomi'
+                'Value': 'Test1'
             },
             {
                 'Key': 'Team',
-                'Value': 'Integrate'
+                'Value': 'DevOps'
             },
             {
                 'Key': 'Contact',
-                'Value': 'devops.dev@intapp.com'
-            },
-            {
-                'Key': 'c7n_skip',
-                'Value': 'True'
+                'Value': 'devops.dev@my-test1-app.com'
             }
         ]
         #'EnableTerminationProtection': "True"
@@ -154,19 +106,8 @@ def json_serial(obj):
 
 def validate_input():
     parser = argparse.ArgumentParser(description='Please specify parameters')
-    parser.add_argument('--MoleculeClusterName',  required=True)
-    parser.add_argument('--NodeInstanceType', required=True)
-    parser.add_argument('--BoomiUsername', required=True)
-    parser.add_argument('--Environment', required=True)
-    parser.add_argument('--BoomiPassword', required=True)
-    parser.add_argument('--BoomiAccountID', required=True)
-    parser.add_argument('--BoomiCloudID', required=True)
-    parser.add_argument('--DesireAmountOfInstance', required=True)
-    parser.add_argument('--VaultPem', required=True)
-    parser.add_argument('--NodeExporterVersion', required=True)
-    parser.add_argument('--FilebeatVersion', required=True)
+    parser.add_argument('--EnvironmentName',  required=True)
     parser.add_argument('--DeployELB', required=True)
-    parser.add_argument('--BoomiCloudName', required=True)
     return parser.parse_args()
 
 if __name__ == '__main__':

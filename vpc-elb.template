@@ -17,42 +17,47 @@ Parameters:
   DomainNameMain:
     Description: Random domain for test env
     Type: String
-    Default: my-test1-app.com
+    Default: 'my-test1-app.com'
 
   DomainNameAltr:
     Description: Random secondary domain for test env
     Type: String
-    Default: my-test-app.net
+    Default: 'my-test-app.net'
+
+  TTLforCname: 
+    Description: TTL value for CNAME record
+    Type: String
+    Default: '900'
 
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this VPC
     Type: String
-    Default: 10.192.0.0/16
+    Default: '10.192.0.0/16'
 
   PublicSubnet1CIDR:
     Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
     Type: String
-    Default: 10.192.10.0/24
+    Default: '10.192.10.0/24'
 
   PublicSubnet2CIDR:
     Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
     Type: String
-    Default: 10.192.11.0/24
+    Default: '10.192.11.0/24'
 
   PrivateSubnet1CIDR:
     Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
     Type: String
-    Default: 10.192.20.0/24
+    Default: '10.192.20.0/24'
 
   PrivateSubnet2CIDR:
     Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
     Type: String
-    Default: 10.192.21.0/24
+    Default: '10.192.21.0/24'
   
   Internet-cidr:
     Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
     Type: String
-    Default: 0.0.0.0/0
+    Default: '0.0.0.0/0'
 
   Internet-ipv6-cidr:
     Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
@@ -62,12 +67,12 @@ Parameters:
   HTTPport:
     Description: HTTP port for SG to allow traffic
     Type: String
-    Default: '!Ref HTTPport'
+    Default: '80'
   
   HTTPSport:
     Description: HTTPS port for SG to allow traffic
     Type: String
-    Default: '!Ref HTTPSport'
+    Default: '443'
 
 Conditions:
   DeployELB: !Equals [ !Ref DeployELB, "true" ]
@@ -283,6 +288,7 @@ Resources:
           CidrIpv6: !Ref Internet-ipv6-cidr
 
   WebServerSecurityGroup:
+    Condition: DeployELB
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Allow HTTPS and traffic from load balancer 
@@ -299,6 +305,7 @@ Resources:
           SourceSecurityGroupId: !Ref ELBSecurityGroup
 
   LoadBalancerSSLCert:
+    Condition: DeployELB
     Type: AWS::CertificateManager::Certificate
     Properties:
       DomainName: !Sub "${EnvironmentName}-api.${DomainNameMain}"
@@ -313,6 +320,7 @@ Resources:
         - !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}"
 
   LoadBalancer:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties: 
       Name: !Sub "${EnvironmentName}-elb"
@@ -326,6 +334,7 @@ Resources:
         - !Ref ELBSecurityGroup
   
   Api01Target:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Protocol: HTTP
@@ -340,6 +349,7 @@ Resources:
       Matcher:
         HttpCode: 200
   Api02Target:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Protocol: HTTPS
@@ -354,6 +364,7 @@ Resources:
       Matcher:
         HttpCode: 200
   HTTPSListener:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       Certificates:
@@ -362,9 +373,10 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref Api01Target
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 443
+      Port: !Ref HTTPSport
       Protocol: HTTPS
   HTTPlistener:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
@@ -377,10 +389,11 @@ Resources:
           Query: '#{query}'
           StatusCode: HTTP_301
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
+      Port: !Ref HTTPport
       Protocol: HTTP
 
   Api01ListenerRule:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties: 
       Actions: 
@@ -395,6 +408,7 @@ Resources:
       ListenerArn: !Ref HTTPSListener
       Priority: 1
   Api02ListenerRule:
+    Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties: 
       Actions: 
@@ -408,53 +422,50 @@ Resources:
       ListenerArn: !Ref HTTPSListener
       Priority: 2
 
-  Api01ARecord:
+  CnameRecord01:
+    Condition: DeployELB
     Type: AWS::Route53::RecordSet
-    Properties: 
-      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
-      Type: A
-      Name: api.myapp.com
-      AliasTarget:
-        DNSName: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - DNSName
-        HostedZoneId: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - CanonicalHostedZoneID
-  Api02ARecord:
+    HostedZoneName: !Sub "${DomainNameMain}."
+    Comment: Cname for !Ref DomainNameMain
+    RecordSets:
+    - Name: !Sub "${EnvironmentName}-api.${DomainNameMain}."
+      Type: CNAME
+      TTL: !Ref TTLforCname
+      SetIdentifier: Frontend One
+      Weight: '4'
+      ResourceRecords:
+      - !GetAtt LoadBalancer.DNSName
+
+  CnameRecord02:
+    Condition: DeployELB
     Type: AWS::Route53::RecordSet
-    Properties: 
-      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
-      Type: A
-      Name: !Sub "${EnvironmentName}-api.${DomainNameMain}"
-      AliasTarget:
-        DNSName: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - DNSName
-        HostedZoneId: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - CanonicalHostedZoneID
-  Api03ARecord:
-    Type: AWS::Route53::RecordSet
-    Properties: 
-      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
-      Type: A
-      Name: !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}"
-      AliasTarget:
-        DNSName: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - DNSName
-        HostedZoneId: 
-          Fn::GetAtt:
-            - LoadBalancer
-            - CanonicalHostedZoneID
+    HostedZoneName: !Sub "${DomainNameAltr}."
+    Comment: Cname for !Ref DomainNameAltr
+    - Name: !Sub "${EnvironmentName}-api.${DomainNameAltr}."
+      Type: CNAME
+      TTL: '900'
+      SetIdentifier: Frontend Two
+      Weight: '6'
+      ResourceRecords:
+      - !GetAtt LoadBalancer.DNSName
+    - Name: !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}."
+      Type: CNAME
+      TTL: '900'
+      SetIdentifier: Frontend Two
+      Weight: '8'
+      ResourceRecords:
+      - !GetAtt LoadBalancer.DNSName
+
 
 Outputs:
+  CnameRecord01:
+    Condition: DeployELB
+    Value: !Ref CnameRecord01
+  
+  CnameRecord02:
+    Condition: DeployELB
+    Value: !Ref CnameRecord01
+
   VPC:
     Description: A reference to the created VPC
     Value: !Ref VPC
