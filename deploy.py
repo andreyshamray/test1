@@ -8,7 +8,7 @@ import botocore
 cf = boto3.client('cloudformation')
 
 def main(args):
-    stack_name = 'test1-{}'.format(args.EnvironmentName)
+    stack_name = 'test-vpcelb-{}'.format(args.EnvironmentName)
     'Update or create stack'
     template = 'vpc-elb.template'
 

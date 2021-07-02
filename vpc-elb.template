@@ -313,7 +313,7 @@ Resources:
         - DomainName: !Sub "${EnvironmentName}-api.${DomainNameMain}"
           ValidationDomain: !Ref DomainNameMain
         - DomainName: !Sub "${EnvironmentName}-api.${DomainNameAltr}"
-          ValidationDomain: !Ref DomainNameAltr my-test-app.net
+          ValidationDomain: !Ref DomainNameAltr
       ValidationMethod: DNS
       SubjectAlternativeNames:
         - !Sub "${EnvironmentName}-api.${DomainNameAltr}"
@@ -333,7 +333,7 @@ Resources:
       SecurityGroups: 
         - !Ref ELBSecurityGroup
   
-  Api01Target:
+  ApiTarget1:
     Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -341,14 +341,14 @@ Resources:
       Port: !Ref HTTPport
       TargetType: instance
       Targets:
-        - Id: !Ref WebServer
+        - Id: !Ref LoadBalancer
           Port: !Ref HTTPport
       HealthCheckEnabled: true
       HealthCheckProtocol: HTTP
       HealthCheckPath: /
       Matcher:
         HttpCode: 200
-  Api02Target:
+  ApiTarget2:
     Condition: DeployELB
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -356,7 +356,7 @@ Resources:
       Port: !Ref HTTPSport
       TargetType: instance
       Targets:
-        - Id: !Ref WebServer
+        - Id: !Ref LoadBalancer
           Port: !Ref HTTPSport
       HealthCheckEnabled: true
       HealthCheckProtocol: HTTPS
@@ -371,7 +371,7 @@ Resources:
         - CertificateArn: !Ref LoadBalancerSSLCert
       DefaultActions:
         - Type: forward
-          TargetGroupArn: !Ref Api01Target
+          TargetGroupArn: !Ref ApiTarget1
       LoadBalancerArn: !Ref LoadBalancer
       Port: !Ref HTTPSport
       Protocol: HTTPS
@@ -398,7 +398,7 @@ Resources:
     Properties: 
       Actions: 
         - Type: forward
-          TargetGroupArn: !Ref Api01Target
+          TargetGroupArn: !Ref ApiTarget1
       Conditions:
         - Field: host-header
           HostHeaderConfig:
@@ -413,7 +413,7 @@ Resources:
     Properties: 
       Actions: 
         - Type: forward
-          TargetGroupArn: !Ref Api02Target
+          TargetGroupArn: !Ref ApiTarget2
       Conditions:
         - Field: path-pattern
           PathPatternConfig:
@@ -497,6 +497,6 @@ Outputs:
     Description: A reference to the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
 
-  NoIngressSecurityGroup:
+  VPCSecurityGroup:
     Description: Security group with no ingress rule
-    Value: !Ref NoIngressSecurityGroup
+    Value: !Ref VPCSecurityGroup
