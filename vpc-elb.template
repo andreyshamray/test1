@@ -22,7 +22,7 @@ Parameters:
   DomainNameAltr:
     Description: Random secondary domain for test env
     Type: String
-    Default: 'my-test-app.net'
+    Default: 'my-test1-app.net'
 
   TTLforCname: 
     Description: TTL value for CNAME record
@@ -54,12 +54,12 @@ Parameters:
     Type: String
     Default: '10.192.21.0/24'
   
-  Internet-cidr:
+  InternetIpv4cidr:
     Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
     Type: String
     Default: '0.0.0.0/0'
 
-  Internet-ipv6-cidr:
+  InternetIpv6cidr:
     Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
     Type: String
     Default: '::/0'
@@ -182,7 +182,7 @@ Resources:
     DependsOn: InternetGatewayAttachment
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: !Ref Internet-cidr
+      DestinationCidrBlock: !Ref InternetIpv4cidr
       GatewayId: !Ref InternetGateway
 
   PublicSubnet1RouteTableAssociation:
@@ -210,7 +210,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
-      DestinationCidrBlock: !Ref Internet-cidr
+      DestinationCidrBlock: !Ref InternetIpv4cidr
       NatGatewayId: !Ref NatGateway1
 
   PrivateSubnet1RouteTableAssociation:
@@ -231,7 +231,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
-      DestinationCidrBlock: !Ref Internet-cidr
+      DestinationCidrBlock: !Ref InternetIpv4cidr
       NatGatewayId: !Ref NatGateway2
 
   PrivateSubnet2RouteTableAssociation:
@@ -251,14 +251,14 @@ Resources:
       SecurityGroupIngress:
         - FromPort: !Ref HTTPport
           IpProtocol: tcp
-          CidrIp: !Ref Internet-cidr
+          CidrIp: !Ref InternetIpv4cidr
           ToPort: !Ref HTTPport
-          Description: allow http from !Ref Internet-cidr
+          Description: allow http from !Ref InternetIpv4cidr
         - IpProtocol: tcp
           FromPort: !Ref HTTPSport
           ToPort: !Ref HTTPSport
-          CidrIp: !Ref Internet-cidr
-          Description: allow https from !Ref Internet-cidr
+          CidrIp: !Ref InternetIpv4cidr
+          Description: allow https from !Ref InternetIpv4cidr
 
   ELBSecurityGroup:
     Condition: DeployELB
@@ -270,22 +270,22 @@ Resources:
           IpProtocol: tcp
           FromPort: !Ref HTTPport
           ToPort: !Ref HTTPport
-          CidrIp: !Ref Internet-cidr
+          CidrIp: !Ref InternetIpv4cidr
         - Description: HTTP IPv6
           IpProtocol: tcp
           FromPort: !Ref HTTPport
           ToPort: !Ref HTTPport
-          CidrIpv6: !Ref Internet-ipv6-cidr
+          CidrIpv6: !Ref InternetIpv6cidr
         - Description: HTTPS IPv4
           IpProtocol: tcp
           FromPort: !Ref HTTPSport
           ToPort: !Ref HTTPSport
-          CidrIp: !Ref Internet-cidr
+          CidrIp: !Ref InternetIpv4cidr
         - Description: HTTPS IPv6
           IpProtocol: tcp
           FromPort: !Ref HTTPSport
           ToPort: !Ref HTTPSport
-          CidrIpv6: !Ref Internet-ipv6-cidr
+          CidrIpv6: !Ref InternetIpv6cidr
 
   WebServerSecurityGroup:
     Condition: DeployELB
@@ -297,7 +297,7 @@ Resources:
           IpProtocol: https
           FromPort: !Ref HTTPSport
           ToPort: !Ref HTTPSport
-          CidrIp: !Ref Internet-cidr
+          CidrIp: !Ref InternetIpv4cidr
         - Description: Allow traffic from load balancer
           IpProtocol: tcp
           FromPort: !Ref HTTPport
@@ -425,36 +425,39 @@ Resources:
   CnameRecord01:
     Condition: DeployELB
     Type: AWS::Route53::RecordSet
-    HostedZoneName: !Sub "${DomainNameMain}."
-    Comment: Cname for !Ref DomainNameMain
-    RecordSets:
-    - Name: !Sub "${EnvironmentName}-api.${DomainNameMain}."
-      Type: CNAME
-      TTL: !Ref TTLforCname
-      SetIdentifier: Frontend One
-      Weight: '4'
-      ResourceRecords:
-      - !GetAtt LoadBalancer.DNSName
+    Properties:
+      HostedZoneName: !Sub "${DomainNameMain}."
+      Comment: Cname for !Ref DomainNameMain
+      RecordSets:
+      - Name: !Sub "${EnvironmentName}-api.${DomainNameMain}."
+        Type: CNAME
+        TTL: !Ref TTLforCname
+        SetIdentifier: Frontend One
+        Weight: '4'
+        ResourceRecords:
+        - !GetAtt LoadBalancer.DNSName
 
   CnameRecord02:
     Condition: DeployELB
     Type: AWS::Route53::RecordSet
-    HostedZoneName: !Sub "${DomainNameAltr}."
-    Comment: Cname for !Ref DomainNameAltr
-    - Name: !Sub "${EnvironmentName}-api.${DomainNameAltr}."
-      Type: CNAME
-      TTL: '900'
-      SetIdentifier: Frontend Two
-      Weight: '6'
-      ResourceRecords:
-      - !GetAtt LoadBalancer.DNSName
-    - Name: !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}."
-      Type: CNAME
-      TTL: '900'
-      SetIdentifier: Frontend Two
-      Weight: '8'
-      ResourceRecords:
-      - !GetAtt LoadBalancer.DNSName
+    Properties:
+      HostedZoneName: !Sub "${DomainNameAltr}."
+      Comment: Cname for !Ref DomainNameAltr
+      RecordSets:
+      - Name: !Sub "${EnvironmentName}-api.${DomainNameAltr}."
+        Type: CNAME
+        TTL: '900'
+        SetIdentifier: Frontend Two
+        Weight: '6'
+        ResourceRecords:
+        - !GetAtt LoadBalancer.DNSName
+      - Name: !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}."
+        Type: CNAME
+        TTL: '900'
+        SetIdentifier: Frontend Two
+        Weight: '8'
+        ResourceRecords:
+        - !GetAtt LoadBalancer.DNSName
 
 
 Outputs:

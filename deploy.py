@@ -70,6 +70,13 @@ def main(args):
     # ))
     stackOutputs = dict((i["OutputKey"], i["OutputValue"]) for i in stack['Stacks'][0]['Outputs'])
 
+    #response = cf_client.describe_stacks(StackName=stack_name)
+    #outputs = response["Stacks"][0]["Outputs"]
+    #   for output in outputs:
+    #        keyName = output["OutputKey"]
+    #        if keyName == "CnameRecord01":
+    #            print(output["OutputValue"])
+
 
 def _parse_template(template):
     with open(template) as template_fileobj:
@@ -103,6 +110,15 @@ def json_serial(obj):
         serial = obj.isoformat()
         return serial
     raise TypeError("Type not serializable")
+
+def get_stack_outputs(stack_name):
+    stack = service['drRegion']['cf'].describe_stacks(StackName=stack_name)['Stacks'][0]
+    if "Outputs" in stack:
+        logger.info("stack '{}' outputs retrieved".format(stack_name))
+        return dict((i["OutputKey"], i["OutputValue"]) for i in stack["Outputs"])
+    else:
+        raise_error("there is no 'Outputs' for Stack '{}', "
+                    "it is in '{}' state, please rerun later".format(stack_name, stack['StackStatus']))
 
 def validate_input():
     parser = argparse.ArgumentParser(description='Please specify parameters')
