@@ -1,12 +1,28 @@
-Description:  This template deploys a VPC, with a pair of public and private subnets spread
-  across two Availability Zones. It deploys an internet gateway, with a default
-  route on the public subnets. It deploys a pair of NAT gateways (one in each AZ),
-  and default routes for them in the private subnets.
+Description:  VPC and ELB for test1
 
 Parameters:
   EnvironmentName:
     Description: An environment name that is prefixed to resource names
     Type: String
+    Default: test1
+
+  DeployELB: 
+    Description: Deploy ELB behind Molecule Cluster
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  
+  DomainNameMain:
+    Description: Random domain for test env
+    Type: String
+    Default: my-test1-app.com
+
+  DomainNameAltr:
+    Description: Random secondary domain for test env
+    Type: String
+    Default: my-test-app.net
 
   VpcCIDR:
     Description: Please enter the IP range (CIDR notation) for this VPC
@@ -32,6 +48,29 @@ Parameters:
     Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
     Type: String
     Default: 10.192.21.0/24
+  
+  Internet-cidr:
+    Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
+    Type: String
+    Default: 0.0.0.0/0
+
+  Internet-ipv6-cidr:
+    Description: Please enter the IP range (CIDR notation) for the SG group to allow !Ref HTTPport and !Ref HTTPSport ports
+    Type: String
+    Default: '::/0'
+  
+  HTTPport:
+    Description: HTTP port for SG to allow traffic
+    Type: String
+    Default: '!Ref HTTPport'
+  
+  HTTPSport:
+    Description: HTTPS port for SG to allow traffic
+    Type: String
+    Default: '!Ref HTTPSport'
+
+Conditions:
+  DeployELB: !Equals [ !Ref DeployELB, "true" ]
 
 Resources:
   VPC:
@@ -138,7 +177,7 @@ Resources:
     DependsOn: InternetGatewayAttachment
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
+      DestinationCidrBlock: !Ref Internet-cidr
       GatewayId: !Ref InternetGateway
 
   PublicSubnet1RouteTableAssociation:
@@ -166,7 +205,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable1
-      DestinationCidrBlock: 0.0.0.0/0
+      DestinationCidrBlock: !Ref Internet-cidr
       NatGatewayId: !Ref NatGateway1
 
   PrivateSubnet1RouteTableAssociation:
@@ -187,7 +226,7 @@ Resources:
     Type: AWS::EC2::Route
     Properties:
       RouteTableId: !Ref PrivateRouteTable2
-      DestinationCidrBlock: 0.0.0.0/0
+      DestinationCidrBlock: !Ref Internet-cidr
       NatGatewayId: !Ref NatGateway2
 
   PrivateSubnet2RouteTableAssociation:
@@ -196,12 +235,224 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref PrivateSubnet2
 
-  NoIngressSecurityGroup:
+  VPCSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: "VPC high-level SG for test1"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: !Sub "${EnvironmentName}-vpc-sg"
+          Value: !Ref EnvironmentName
+      SecurityGroupIngress:
+        - FromPort: !Ref HTTPport
+          IpProtocol: tcp
+          CidrIp: !Ref Internet-cidr
+          ToPort: !Ref HTTPport
+          Description: allow http from !Ref Internet-cidr
+        - IpProtocol: tcp
+          FromPort: !Ref HTTPSport
+          ToPort: !Ref HTTPSport
+          CidrIp: !Ref Internet-cidr
+          Description: allow https from !Ref Internet-cidr
+
+  ELBSecurityGroup:
+    Condition: DeployELB
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "no-ingress-sg"
-      GroupDescription: "Security group with no ingress rule"
-      VpcId: !Ref VPC
+      GroupDescription: Allows HTTP and HTTPS connections 
+      SecurityGroupIngress:
+        - Description: HTTP IPv4
+          IpProtocol: tcp
+          FromPort: !Ref HTTPport
+          ToPort: !Ref HTTPport
+          CidrIp: !Ref Internet-cidr
+        - Description: HTTP IPv6
+          IpProtocol: tcp
+          FromPort: !Ref HTTPport
+          ToPort: !Ref HTTPport
+          CidrIpv6: !Ref Internet-ipv6-cidr
+        - Description: HTTPS IPv4
+          IpProtocol: tcp
+          FromPort: !Ref HTTPSport
+          ToPort: !Ref HTTPSport
+          CidrIp: !Ref Internet-cidr
+        - Description: HTTPS IPv6
+          IpProtocol: tcp
+          FromPort: !Ref HTTPSport
+          ToPort: !Ref HTTPSport
+          CidrIpv6: !Ref Internet-ipv6-cidr
+
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTPS and traffic from load balancer 
+      SecurityGroupIngress:
+        - Description: HTTPS traffic
+          IpProtocol: https
+          FromPort: !Ref HTTPSport
+          ToPort: !Ref HTTPSport
+          CidrIp: !Ref Internet-cidr
+        - Description: Allow traffic from load balancer
+          IpProtocol: tcp
+          FromPort: !Ref HTTPport
+          ToPort: !Ref HTTPport
+          SourceSecurityGroupId: !Ref ELBSecurityGroup
+
+  LoadBalancerSSLCert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub "${EnvironmentName}-api.${DomainNameMain}"
+      DomainValidationOptions:
+        - DomainName: !Sub "${EnvironmentName}-api.${DomainNameMain}"
+          ValidationDomain: !Ref DomainNameMain
+        - DomainName: !Sub "${EnvironmentName}-api.${DomainNameAltr}"
+          ValidationDomain: !Ref DomainNameAltr my-test-app.net
+      ValidationMethod: DNS
+      SubjectAlternativeNames:
+        - !Sub "${EnvironmentName}-api.${DomainNameAltr}"
+        - !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}"
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: !Sub "${EnvironmentName}-elb"
+      Type: application
+      IpAddressType: ipv4
+      LoadBalancerAttributes: 
+        - Key: routing.http2.enabled
+          Value: true
+      Scheme: internet-facing
+      SecurityGroups: 
+        - !Ref ELBSecurityGroup
+  
+  Api01Target:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Protocol: HTTP
+      Port: !Ref HTTPport
+      TargetType: instance
+      Targets:
+        - Id: !Ref WebServer
+          Port: !Ref HTTPport
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+  Api02Target:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Protocol: HTTPS
+      Port: !Ref HTTPSport
+      TargetType: instance
+      Targets:
+        - Id: !Ref WebServer
+          Port: !Ref HTTPSport
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTPS
+      HealthCheckPath: /
+      Matcher:
+        HttpCode: 200
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn: !Ref LoadBalancerSSLCert
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref Api01Target
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+  HTTPlistener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: redirect
+        RedirectConfig:
+          Protocol: HTTPS
+          Port: '443'
+          Host: '#{host}'
+          Path: /#{path}
+          Query: '#{query}'
+          StatusCode: HTTP_301
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  Api01ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - Type: forward
+          TargetGroupArn: !Ref Api01Target
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub "${EnvironmentName}-api.${DomainNameAltr}"
+              - !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}"
+      ListenerArn: !Ref HTTPSListener
+      Priority: 1
+  Api02ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties: 
+      Actions: 
+        - Type: forward
+          TargetGroupArn: !Ref Api02Target
+      Conditions:
+        - Field: path-pattern
+          PathPatternConfig:
+            Values:
+              - /v2
+      ListenerArn: !Ref HTTPSListener
+      Priority: 2
+
+  Api01ARecord:
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
+      Type: A
+      Name: api.myapp.com
+      AliasTarget:
+        DNSName: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - DNSName
+        HostedZoneId: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - CanonicalHostedZoneID
+  Api02ARecord:
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
+      Type: A
+      Name: !Sub "${EnvironmentName}-api.${DomainNameMain}"
+      AliasTarget:
+        DNSName: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - DNSName
+        HostedZoneId: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - CanonicalHostedZoneID
+  Api03ARecord:
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      HostedZoneId: !FindInMap [EnvironmentMap, !Ref Environment, HostedZoneId]
+      Type: A
+      Name: !Sub "${EnvironmentName}-api.v1.${DomainNameAltr}"
+      AliasTarget:
+        DNSName: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - DNSName
+        HostedZoneId: 
+          Fn::GetAtt:
+            - LoadBalancer
+            - CanonicalHostedZoneID
 
 Outputs:
   VPC:
